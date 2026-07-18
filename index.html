@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Availability Dashboard</title>
+<style>
+  :root{ color-scheme: light; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+  .viz-root{
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --card-shadow:    0 1px 2px rgba(11,11,11,0.06), 0 1px 1px rgba(11,11,11,0.04);
+
+    --series-available: #008300;
+    --series-sold:       #2a78d6;
+    --series-portout:    #4a3aa7;
+    --series-pick:       #e34948;
+    --fill-muted:        #e1e0d9;
+
+    --status-good: #0ca30c;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])) .viz-root{
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --card-shadow:    0 1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(0,0,0,0.3);
+
+      --series-available: #008300;
+      --series-sold:       #3987e5;
+      --series-portout:    #9085e9;
+      --series-pick:       #e66767;
+      --fill-muted:        #33332f;
+
+      --status-good: #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] .viz-root{
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --card-shadow:    0 1px 2px rgba(0,0,0,0.4), 0 1px 1px rgba(0,0,0,0.3);
+
+    --series-available: #008300;
+    --series-sold:       #3987e5;
+    --series-portout:    #9085e9;
+    --series-pick:       #e66767;
+    --fill-muted:        #33332f;
+
+    --status-good: #0ca30c;
+  }
+
+  .viz-root{ background: var(--page); color: var(--text-primary); min-height:100vh; }
+  .wrap{ max-width: 1180px; margin:0 auto; padding: 28px 20px 60px; }
+
+  .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:22px; flex-wrap:wrap; }
+  h1{ font-size:22px; font-weight:700; margin:0 0 4px; letter-spacing:-0.01em; }
+  .subtitle{ color:var(--text-secondary); font-size:13.5px; margin:0; max-width: 640px; line-height:1.5; }
+  .subtitle b{ color:var(--text-primary); font-weight:600; }
+
+  .theme-toggle{
+    display:flex; align-items:center; gap:6px; background:var(--surface-1); border:1px solid var(--border);
+    border-radius:8px; padding:4px; box-shadow:var(--card-shadow);
+  }
+  .theme-toggle button{
+    border:none; background:transparent; color:var(--text-secondary); font-size:12px; font-weight:600;
+    padding:6px 10px; border-radius:6px; cursor:pointer; font-family:inherit;
+  }
+  .theme-toggle button.active{ background:var(--page); color:var(--text-primary); }
+
+  /* Summary comparison strip */
+  .compare-strip{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:22px; }
+  .compare-card{
+    background:var(--surface-1); border:1px solid var(--border); border-radius:12px; padding:16px 18px;
+    box-shadow:var(--card-shadow); cursor:pointer; transition:transform .12s ease, box-shadow .12s ease;
+    text-align:left; font-family:inherit;
+  }
+  .compare-card:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(11,11,11,0.10); }
+  .compare-card.selected{ outline:2px solid var(--series-available); outline-offset:-2px; }
+  .compare-card .cc-label{ font-size:11.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px; }
+  .compare-card .cc-value{ font-size:30px; font-weight:700; color:var(--series-available); line-height:1; margin-bottom:6px; font-variant-numeric:proportional-nums; }
+  .compare-card .cc-sub{ font-size:12.5px; color:var(--text-secondary); }
+  .compare-track{ height:6px; border-radius:3px; background:var(--gridline); margin-top:10px; overflow:hidden; }
+  .compare-track > div{ height:100%; background:var(--series-available); border-radius:3px; }
+
+  /* Tabs */
+  .tabs{ display:flex; gap:4px; background:var(--surface-1); border:1px solid var(--border); border-radius:10px; padding:4px; width:fit-content; margin-bottom:20px; box-shadow:var(--card-shadow); }
+  .tabs button{
+    border:none; background:transparent; font-family:inherit; font-size:13.5px; font-weight:600; color:var(--text-secondary);
+    padding:8px 18px; border-radius:7px; cursor:pointer;
+  }
+  .tabs button.active{ background:var(--series-available); color:#fff; }
+
+  .card{ background:var(--surface-1); border:1px solid var(--border); border-radius:12px; padding:20px 22px; box-shadow:var(--card-shadow); margin-bottom:18px; }
+  .card h2{ font-size:14.5px; font-weight:700; margin:0 0 4px; }
+  .card .card-sub{ font-size:12.5px; color:var(--text-secondary); margin:0 0 16px; }
+
+  /* Hero */
+  .hero{ display:flex; align-items:center; gap:28px; flex-wrap:wrap; }
+  .hero-figure{ font-size:56px; font-weight:700; color:var(--series-available); line-height:1; letter-spacing:-0.02em; }
+  .hero-text{ font-size:13.5px; color:var(--text-secondary); max-width:340px; line-height:1.5; }
+  .hero-text b{ color:var(--text-primary); font-weight:700; }
+  .hero-bar-wrap{ flex:1; min-width:220px; }
+  .hero-track{ height:14px; border-radius:7px; background:var(--gridline); overflow:hidden; display:flex; }
+  .hero-track-fill{ height:100%; background:var(--series-available); border-radius:7px 0 0 7px; transition:width .4s ease; }
+
+  /* Stat tiles */
+  .tiles{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:18px; }
+  .tile{ background:var(--surface-1); border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--card-shadow); }
+  .tile .t-swatch{ width:10px; height:10px; border-radius:2px; display:inline-block; margin-right:6px; }
+  .tile .t-label{ font-size:12px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:.03em; }
+  .tile .t-value{ font-size:22px; font-weight:700; margin-top:8px; font-variant-numeric:proportional-nums; }
+  .tile .t-sub{ font-size:12px; color:var(--text-muted); margin-top:2px; }
+
+  /* Legend */
+  .legend{ display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; }
+  .legend button{ display:flex; align-items:center; gap:6px; border:none; background:transparent; cursor:pointer; font-family:inherit; padding:4px 6px; border-radius:6px; }
+  .legend button:hover{ background:var(--page); }
+  .legend button.off{ opacity:.35; }
+  .legend .sw{ width:11px; height:11px; border-radius:3px; flex:none; }
+  .legend .lbl{ font-size:12.5px; color:var(--text-secondary); font-weight:600; }
+
+  /* Filter chips (multi-select combo filter) */
+  .chips{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .chip{
+    display:flex; align-items:center; gap:8px; font-family:inherit; font-size:13px; font-weight:600;
+    padding:8px 14px 8px 10px; border-radius:20px; cursor:pointer; border:1.5px solid var(--border);
+    background:var(--page); color:var(--text-secondary); transition:all .12s ease;
+  }
+  .chip .sw{ width:12px; height:12px; border-radius:50%; flex:none; background:var(--fill-muted); border:1.5px solid rgba(0,0,0,0.15); transition:background .12s ease; }
+  .chip .ck{ font-size:12px; width:14px; text-align:center; opacity:0; transition:opacity .12s ease; }
+  .chip.active{ border-color:transparent; color:var(--text-primary); background:var(--chip-bg, var(--surface-1)); box-shadow:0 0 0 1.5px var(--chip-color) inset; }
+  .chip.active .sw{ background:var(--chip-color); border-color:transparent; }
+  .chip.active .ck{ opacity:1; color:var(--chip-color); }
+  .chip-actions{ display:flex; gap:8px; margin-left:auto; }
+  .chip-actions button{ border:none; background:transparent; font-family:inherit; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; text-decoration:underline; padding:4px; }
+  .chip-actions button:hover{ color:var(--text-primary); }
+  .filter-summary{ font-size:12.5px; color:var(--text-secondary); margin-top:14px; line-height:1.6; }
+  .filter-summary b{ color:var(--text-primary); }
+  .empty-note{ font-size:12.5px; color:var(--text-muted); font-style:italic; padding:8px 0; }
+
+  th.col-muted, td.col-muted{ opacity:.38; }
+  th.col-active{ color:var(--col-color, inherit); }
+
+  /* 100% stacked overall bar */
+  .stackbar{ display:flex; width:100%; height:34px; border-radius:8px; overflow:hidden; border:1px solid var(--border); }
+  .stackbar .seg{ height:100%; display:flex; align-items:center; justify-content:center; position:relative; transition:opacity .15s ease; }
+  .stackbar .seg span{ font-size:12px; font-weight:700; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.25); white-space:nowrap; }
+  .stackbar .seg + .seg{ border-left:2px solid var(--surface-1); }
+
+  /* tier chart */
+  .chart-scroll{ overflow-x:auto; }
+  svg{ display:block; }
+  .bar-seg{ cursor:pointer; transition:opacity .15s ease; }
+  .bar-seg:hover{ filter:brightness(1.08); }
+  .axis-label{ font-size:11px; fill:var(--text-muted); font-family:inherit; }
+  .tier-label{ font-size:12px; fill:var(--text-secondary); font-family:inherit; font-weight:600; }
+  .tier-total-label{ font-size:10.5px; fill:var(--text-muted); font-family:inherit; }
+  .gridline{ stroke:var(--gridline); stroke-width:1; }
+
+  .tooltip{
+    position:fixed; pointer-events:none; background:var(--text-primary); color:var(--surface-1);
+    font-size:12px; padding:8px 10px; border-radius:7px; line-height:1.5; box-shadow:0 4px 14px rgba(0,0,0,0.25);
+    opacity:0; transform:translateY(4px); transition:opacity .1s ease, transform .1s ease; z-index:50; max-width:220px;
+  }
+  .tooltip.show{ opacity:1; transform:translateY(0); }
+  .tooltip b{ font-weight:700; }
+
+  .toggle-row{ display:flex; justify-content:flex-end; margin-bottom:10px; }
+  .view-toggle{ display:flex; gap:4px; background:var(--page); border:1px solid var(--border); border-radius:8px; padding:3px; }
+  .view-toggle button{ border:none; background:transparent; font-family:inherit; font-size:12px; font-weight:600; color:var(--text-secondary); padding:6px 12px; border-radius:6px; cursor:pointer; }
+  .view-toggle button.active{ background:var(--surface-1); color:var(--text-primary); box-shadow:var(--card-shadow); }
+
+  table.data-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.data-table th, table.data-table td{ text-align:right; padding:8px 10px; border-bottom:1px solid var(--gridline); font-variant-numeric:tabular-nums; }
+  table.data-table th:first-child, table.data-table td:first-child{ text-align:left; font-variant-numeric:proportional-nums; font-weight:600; }
+  table.data-table thead th{ color:var(--text-muted); font-weight:700; text-transform:uppercase; font-size:10.5px; letter-spacing:.03em; border-bottom:1px solid var(--baseline); }
+  table.data-table tbody tr:hover{ background:var(--page); }
+  table.data-table tfoot td{ font-weight:700; border-top:1px solid var(--baseline); border-bottom:none; }
+  .pos{ color: var(--series-available); font-weight:700; }
+
+  .footnote{ font-size:11.5px; color:var(--text-muted); margin-top:6px; line-height:1.6; }
+
+  @media (max-width:760px){
+    .tiles{ grid-template-columns:repeat(2,1fr); }
+    .compare-strip{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root" id="root">
+  <div class="wrap">
+
+    <div class="topbar">
+      <div>
+        <h1>Stock Availability Dashboard</h1>
+        <p class="subtitle">Batches <b>574</b> and <b>575</b>, by loyalty tier. <b>Available stock</b> = units that are not Sold, not Port&#8209;out, and not Pick (i.e. Normal, Frozen, Lock and other held states).</p>
+      </div>
+      <div class="theme-toggle" role="group" aria-label="Theme">
+        <button type="button" data-theme-btn="light">Light</button>
+        <button type="button" data-theme-btn="dark">Dark</button>
+        <button type="button" data-theme-btn="auto" class="active">Auto</button>
+      </div>
+    </div>
+
+    <div class="compare-strip" id="compareStrip"></div>
+
+    <div class="tabs" id="tabs" role="tablist" aria-label="Dataset">
+      <button data-tab="575" type="button">Table 575</button>
+      <button data-tab="574" type="button">Table 574</button>
+      <button data-tab="Total" type="button">Total (574+575)</button>
+    </div>
+
+    <div class="card">
+      <h2>Filter by status</h2>
+      <p class="card-sub">Select any combination of statuses — Sold, Port&#8209;out, Pick, Other (Available) — and the whole dashboard below updates to match.</p>
+      <div class="chips" id="filterChips"></div>
+      <div class="filter-summary" id="filterSummary"></div>
+    </div>
+
+    <div class="card">
+      <h2 id="heroTitle">Available Stock — Total</h2>
+      <p class="card-sub" id="heroSub">Share of the grand total that is neither sold, ported out, nor on pick.</p>
+      <div class="hero">
+        <div class="hero-figure" id="heroFigure">35.87%</div>
+        <div class="hero-text" id="heroText">of all units are currently <b>available</b>.</div>
+        <div class="hero-bar-wrap">
+          <div class="hero-track"><div class="hero-track-fill" id="heroTrack" style="width:35.87%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="card">
+      <h2>Overall composition</h2>
+      <p class="card-sub" id="stackbarSub">100% of grand total. Statuses selected in the filter above are shown in color; the rest are greyed out.</p>
+      <div class="stackbar" id="stackbar"></div>
+    </div>
+
+    <div class="card">
+      <div class="toggle-row">
+        <div class="view-toggle" id="viewToggle">
+          <button data-view="chart" class="active" type="button">Chart</button>
+          <button data-view="table" type="button">Table</button>
+        </div>
+      </div>
+      <h2 id="tierTitle">Composition by tier</h2>
+      <p class="card-sub">Each bar = 100% of that tier. Statuses selected in the filter above stay in color; the rest are greyed out. Hover a segment for exact counts.</p>
+      <div class="chart-scroll" id="chartView"><svg id="tierChart"></svg></div>
+      <div id="tableView" style="display:none;"></div>
+      <p class="footnote">Source: uploaded pivot (Sheet5). Available = Tier Total − (Sold + Port&#8209;out + Pick). Figures verified to reconcile with the sheet's Grand Total rows.</p>
+    </div>
+
+  </div>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+const DATA = {
+"575": {"grand_total": 1000000, "tier_totals": [428550,318990,161182,76984,12393,1846,55], "sold": [270256,185075,32824,6766,635,47,1], "portout": [94125,64391,22597,4834,2274,1165,54], "pick": [21015,24510,1255,842,947,163,0], "available": [43154,45014,104506,64542,8537,471,0], "total_available": 266224, "total_sold": 495604, "total_portout": 189440, "total_pick": 48732, "pct_available": 26.6224, "pct_sold": 49.5604, "pct_portout": 18.944, "pct_pick": 4.8732},
+"574": {"grand_total": 1000000, "tier_totals": [477629,353718,107025,52987,7255,1349,37], "sold": [293987,104948,6331,396,40,20,1], "portout": [60189,26082,2757,213,472,724,36], "pick": [37436,14885,118,52,79,59,0], "available": [86017,207803,97819,52326,6664,546,0], "total_available": 451175, "total_sold": 405723, "total_portout": 90473, "total_pick": 52629, "pct_available": 45.1175, "pct_sold": 40.5723, "pct_portout": 9.0473, "pct_pick": 5.2629},
+"Total": {"grand_total": 2000000, "tier_totals": [906179,672708,268207,129971,19648,3195,92], "sold": [564243,290023,39155,7162,675,67,2], "portout": [154314,90473,25354,5047,2746,1889,90], "pick": [58451,39395,1373,894,1026,222,0], "available": [129171,252817,202325,116868,15201,1017,0], "total_available": 717399, "total_sold": 901327, "total_portout": 279913, "total_pick": 101361, "pct_available": 35.87, "pct_sold": 45.0663, "pct_portout": 13.9957, "pct_pick": 5.0681}
+};
+const TIERS = ["Free","Economy","Bronze","Silver","Gold","Platinum","Diamond"];
+const CATS = [
+  {key:"sold",       label:"Sold",              varName:"--series-sold"},
+  {key:"portout",    label:"Port-out",          varName:"--series-portout"},
+  {key:"pick",       label:"Pick",              varName:"--series-pick"},
+  {key:"available",  label:"Other (Available)", varName:"--series-available"},
+];
+let currentTab = "Total";
+let selected = new Set(["available"]); // multi-select combo filter — default reproduces the original "Available stock" view
+const chipColorVar = key => CATS.find(c=>c.key===key).varName;
+function selectedSum(d, tierIdx){
+  let s = 0;
+  CATS.forEach(c=>{
+    if(!selected.has(c.key)) return;
+    s += (tierIdx === undefined) ? (d['total_'+c.key] !== undefined ? d['total_'+c.key] : d[c.key].reduce((a,b)=>a+b,0)) : d[c.key][tierIdx];
+  });
+  return s;
+}
+function selectedLabel(){
+  if(selected.size === 0) return 'nothing';
+  if(selected.size === CATS.length) return 'all statuses';
+  return CATS.filter(c=>selected.has(c.key)).map(c=>c.label).join(' + ');
+}
+const fmt = n => n.toLocaleString("en-US");
+const pct = n => (Math.round(n*100)/100).toString() + "%";
+
+function cssVar(name){ return getComputedStyle(document.getElementById('root')).getPropertyValue(name).trim(); }
+
+function renderFilterChips(){
+  const wrap = document.getElementById('filterChips');
+  wrap.innerHTML = "";
+  CATS.forEach(c=>{
+    const on = selected.has(c.key);
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip' + (on ? ' active' : '');
+    chip.style.setProperty('--chip-color', `var(${c.varName})`);
+    chip.innerHTML = `<span class="sw"></span><span>${c.label}</span><span class="ck">&#10003;</span>`;
+    chip.addEventListener('click', ()=>{
+      if(on) selected.delete(c.key); else selected.add(c.key);
+      renderAll();
+    });
+    wrap.appendChild(chip);
+  });
+  const actions = document.createElement('div');
+  actions.className = 'chip-actions';
+  actions.innerHTML = `<button type="button" id="selAll">Select all</button><button type="button" id="selClear">Clear</button>`;
+  wrap.appendChild(actions);
+  document.getElementById('selAll').addEventListener('click', ()=>{ CATS.forEach(c=>selected.add(c.key)); renderAll(); });
+  document.getElementById('selClear').addEventListener('click', ()=>{ selected.clear(); renderAll(); });
+
+  const d = DATA[currentTab];
+  const sum = selectedSum(d);
+  const p = d.grand_total>0 ? sum/d.grand_total*100 : 0;
+  document.getElementById('filterSummary').innerHTML = selected.size===0
+    ? `Select at least one status above to filter the dashboard.`
+    : `Selected (<b>${selectedLabel()}</b>) = <b>${fmt(sum)}</b> units — <b>${pct(p)}</b> of the ${currentTab==='Total'?'combined':'table '+currentTab} grand total.`;
+}
+
+function renderCompareStrip(){
+  const el = document.getElementById('compareStrip');
+  el.innerHTML = "";
+  ["575","574","Total"].forEach(key=>{
+    const d = DATA[key];
+    const sum = selectedSum(d);
+    const p = d.grand_total>0 ? sum/d.grand_total*100 : 0;
+    const card = document.createElement('button');
+    card.className = 'compare-card' + (key===currentTab ? ' selected' : '');
+    card.type = 'button';
+    card.innerHTML = `
+      <div class="cc-label">${key === 'Total' ? 'Total (574+575)' : 'Table '+key}</div>
+      <div class="cc-value">${pct(p)}</div>
+      <div class="cc-sub">${fmt(sum)} of ${fmt(d.grand_total)} units selected</div>
+      <div class="compare-track"><div style="width:${p}%"></div></div>
+    `;
+    card.addEventListener('click', ()=>{ currentTab = key; renderAll(); });
+    el.appendChild(card);
+  });
+}
+
+function renderTabs(){
+  document.querySelectorAll('#tabs button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab === currentTab);
+  });
+}
+
+function renderHero(){
+  const d = DATA[currentTab];
+  const label = currentTab === 'Total' ? 'Total (574 + 575)' : 'Table ' + currentTab;
+  const sum = selectedSum(d);
+  const p = d.grand_total>0 ? sum/d.grand_total*100 : 0;
+  document.getElementById('heroTitle').textContent = 'Selected Stock (' + selectedLabel() + ') — ' + label;
+  document.getElementById('heroFigure').textContent = pct(p);
+  document.getElementById('heroText').innerHTML = selected.size===0
+    ? `No status selected — choose one or more above.`
+    : `of <b>${fmt(d.grand_total)}</b> units (<b>${fmt(sum)}</b>) match <b>${selectedLabel()}</b>.`;
+  document.getElementById('heroTrack').style.width = p + '%';
+}
+
+function renderTiles(){
+  const d = DATA[currentTab];
+  const all = [
+    {key:null, label:'Grand Total', value: fmt(d.grand_total), sub:'100% of table', color:null},
+    {key:'sold', label:'Sold', value: fmt(d.total_sold), sub: pct(d.pct_sold)+' of total', color:'--series-sold'},
+    {key:'portout', label:'Port-out', value: fmt(d.total_portout), sub: pct(d.pct_portout)+' of total', color:'--series-portout'},
+    {key:'pick', label:'Pick', value: fmt(d.total_pick), sub: pct(d.pct_pick)+' of total', color:'--series-pick'},
+    {key:'available', label:'Other (Available)', value: fmt(d.total_available), sub: pct(d.pct_available)+' of total', color:'--series-available'},
+  ];
+  const rows = all.filter(r=> r.key===null || selected.has(r.key));
+  const el = document.getElementById('tiles');
+  el.innerHTML = (rows.length ? rows : all.slice(0,1)).map(r=>`
+    <div class="tile">
+      <div class="t-label">${r.color?`<span class="t-swatch" style="background:var(${r.color})"></span>`:''}${r.label}</div>
+      <div class="t-value">${r.value}</div>
+      <div class="t-sub">${r.sub}</div>
+    </div>
+  `).join('');
+}
+
+function renderLegendAndStackbar(){
+  const d = DATA[currentTab];
+  const stackbar = document.getElementById('stackbar');
+  stackbar.innerHTML = "";
+  const total = d.grand_total;
+  document.getElementById('stackbarSub').textContent =
+    `100% of grand total. ${selected.size ? selectedLabel()+' shown in color; the rest greyed out.' : 'Select a status in the filter above to highlight it.'}`;
+  CATS.forEach(c=>{
+    const val = d['total_'+c.key] !== undefined ? d['total_'+c.key] : d[c.key].reduce((a,b)=>a+b,0);
+    const width = (val/total*100);
+    const on = selected.has(c.key);
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.style.background = on ? `var(${c.varName})` : `var(--fill-muted)`;
+    seg.style.width = width + '%';
+    if(width > 6){
+      seg.innerHTML = `<span style="${on?'':'color:var(--text-secondary); text-shadow:none;'}">${pct(width)}</span>`;
+    }
+    seg.title = `${c.label}: ${fmt(val)} (${pct(width)})`;
+    stackbar.appendChild(seg);
+  });
+}
+
+function showTooltip(evt, html){
+  const tt = document.getElementById('tooltip');
+  tt.innerHTML = html;
+  tt.classList.add('show');
+  const x = evt.clientX + 14, y = evt.clientY + 14;
+  tt.style.left = x + 'px';
+  tt.style.top = y + 'px';
+}
+function hideTooltip(){ document.getElementById('tooltip').classList.remove('show'); }
+
+function renderTierChart(){
+  const d = DATA[currentTab];
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.getElementById('tierChart');
+  svg.innerHTML = "";
+
+  const width = 1080, plotH = 300, marginL = 40, marginR = 20, marginT = 10, marginB = 56;
+  const plotW = width - marginL - marginR;
+  const barCount = TIERS.length;
+  const gap = 22;
+  const barW = (plotW - gap*(barCount-1)) / barCount;
+  const totalH = marginT + plotH + marginB;
+  svg.setAttribute('viewBox', `0 0 ${width} ${totalH}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', totalH);
+
+  // gridlines at 0,25,50,75,100%
+  [0,25,50,75,100].forEach(p=>{
+    const y = marginT + plotH - (p/100*plotH);
+    const line = document.createElementNS(svgNS,'line');
+    line.setAttribute('x1', marginL); line.setAttribute('x2', width-marginR);
+    line.setAttribute('y1', y); line.setAttribute('y2', y);
+    line.setAttribute('class','gridline');
+    svg.appendChild(line);
+    const lbl = document.createElementNS(svgNS,'text');
+    lbl.setAttribute('x', marginL - 8); lbl.setAttribute('y', y+3);
+    lbl.setAttribute('text-anchor','end'); lbl.setAttribute('class','axis-label');
+    lbl.textContent = p + '%';
+    svg.appendChild(lbl);
+  });
+
+  TIERS.forEach((tier, i)=>{
+    const tierTotal = d.tier_totals[i];
+    const x0 = marginL + i*(barW+gap);
+    let yCursor = marginT + plotH;
+
+    // Full 100%-of-tier stack always; selected categories in color, the rest greyed out.
+    CATS.forEach(c=>{
+      const val = d[c.key][i];
+      const frac = tierTotal>0 ? val/tierTotal : 0;
+      const h = frac*plotH;
+      const y = yCursor - h;
+      const on = selected.has(c.key);
+      const rect = document.createElementNS(svgNS,'rect');
+      rect.setAttribute('x', x0); rect.setAttribute('y', y);
+      rect.setAttribute('width', barW); rect.setAttribute('height', Math.max(h,0));
+      rect.setAttribute('fill', on ? `var(${c.varName})` : `var(--fill-muted)`);
+      rect.setAttribute('class','bar-seg');
+      rect.setAttribute('rx', 2);
+      rect.addEventListener('mousemove', (evt)=>{
+        showTooltip(evt, `<b>${tier} — ${c.label}</b>${on?' (selected)':''}<br>${fmt(val)} units<br>${pct(frac*100)} of ${tier} tier<br>tier total: ${fmt(tierTotal)}`);
+      });
+      rect.addEventListener('mouseleave', hideTooltip);
+      svg.appendChild(rect);
+      yCursor = y;
+    });
+
+    const tlabel = document.createElementNS(svgNS,'text');
+    tlabel.setAttribute('x', x0 + barW/2); tlabel.setAttribute('y', marginT+plotH+18);
+    tlabel.setAttribute('text-anchor','middle'); tlabel.setAttribute('class','tier-label');
+    tlabel.textContent = tier;
+    svg.appendChild(tlabel);
+
+    const totLabel = document.createElementNS(svgNS,'text');
+    totLabel.setAttribute('x', x0 + barW/2); totLabel.setAttribute('y', marginT+plotH+34);
+    totLabel.setAttribute('text-anchor','middle'); totLabel.setAttribute('class','tier-total-label');
+    totLabel.textContent = fmt(tierTotal) + ' total';
+    svg.appendChild(totLabel);
+
+    const selPct = tierTotal>0 ? (selectedSum(d,i)/tierTotal*100) : 0;
+    const availLabel = document.createElementNS(svgNS,'text');
+    availLabel.setAttribute('x', x0 + barW/2); availLabel.setAttribute('y', marginT+plotH+48);
+    availLabel.setAttribute('text-anchor','middle'); availLabel.setAttribute('class','tier-total-label');
+    availLabel.setAttribute('fill', selected.size ? cssVar('--series-available') : cssVar('--text-muted'));
+    availLabel.style.fontWeight = '700';
+    availLabel.textContent = selected.size ? pct(selPct) + ' selected' : '—';
+    svg.appendChild(availLabel);
+  });
+
+  // baseline
+  const base = document.createElementNS(svgNS,'line');
+  base.setAttribute('x1', marginL); base.setAttribute('x2', width-marginR);
+  base.setAttribute('y1', marginT+plotH); base.setAttribute('y2', marginT+plotH);
+  base.setAttribute('stroke', cssVar('--baseline'));
+  base.setAttribute('stroke-width','1.5');
+  svg.appendChild(base);
+}
+
+function renderTable(){
+  const d = DATA[currentTab];
+  const cls = key => selected.has(key) ? 'col-active' : 'col-muted';
+  const style = key => selected.has(key) ? `style="--col-color:var(${chipColorVar(key)})"` : '';
+  let rows = TIERS.map((tier,i)=>{
+    const total = d.tier_totals[i];
+    const sel = selectedSum(d,i);
+    const selPct = total>0 ? (sel/total*100) : 0;
+    return `<tr>
+      <td>${tier}</td>
+      <td class="${cls('sold')}">${fmt(d.sold[i])}</td>
+      <td class="${cls('portout')}">${fmt(d.portout[i])}</td>
+      <td class="${cls('pick')}">${fmt(d.pick[i])}</td>
+      <td class="${cls('available')}">${fmt(d.available[i])}</td>
+      <td>${fmt(total)}</td>
+      <td class="pos">${fmt(sel)}</td>
+      <td class="pos">${selected.size ? pct(selPct) : '—'}</td>
+    </tr>`;
+  }).join('');
+  const selTotal = selectedSum(d);
+  const html = `
+    <table class="data-table">
+      <thead><tr>
+        <th>Tier</th>
+        <th class="${cls('sold')}" ${style('sold')}>Sold</th>
+        <th class="${cls('portout')}" ${style('portout')}>Port-out</th>
+        <th class="${cls('pick')}" ${style('pick')}>Pick</th>
+        <th class="${cls('available')}" ${style('available')}>Other (Available)</th>
+        <th>Tier Total</th>
+        <th>Selected &Sigma;</th>
+        <th>% Selected</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr>
+        <td>Grand Total</td>
+        <td class="${cls('sold')}">${fmt(d.total_sold)}</td>
+        <td class="${cls('portout')}">${fmt(d.total_portout)}</td>
+        <td class="${cls('pick')}">${fmt(d.total_pick)}</td>
+        <td class="${cls('available')}">${fmt(d.total_available)}</td>
+        <td>${fmt(d.grand_total)}</td>
+        <td class="pos">${fmt(selTotal)}</td>
+        <td class="pos">${selected.size ? pct(d.grand_total>0?selTotal/d.grand_total*100:0) : '—'}</td>
+      </tr></tfoot>
+    </table>`;
+  document.getElementById('tableView').innerHTML = html;
+}
+
+function renderAll(){
+  renderFilterChips();
+  renderCompareStrip();
+  renderTabs();
+  renderHero();
+  renderTiles();
+  renderLegendAndStackbar();
+  renderTierChart();
+  renderTable();
+  const label = currentTab === 'Total' ? 'Total (574 + 575)' : 'Table ' + currentTab;
+  document.getElementById('tierTitle').textContent = 'Composition by tier — ' + label;
+}
+
+document.getElementById('tabs').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-tab]');
+  if(!btn) return;
+  currentTab = btn.dataset.tab;
+  renderAll();
+});
+
+document.getElementById('viewToggle').addEventListener('click', (e)=>{
+  const btn = e.target.closest('button[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('#viewToggle button').forEach(b=>b.classList.toggle('active', b===btn));
+  document.getElementById('chartView').style.display = btn.dataset.view==='chart' ? '' : 'none';
+  document.getElementById('tableView').style.display = btn.dataset.view==='table' ? '' : 'none';
+});
+
+document.querySelectorAll('[data-theme-btn]').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-theme-btn]').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    const mode = btn.dataset.themeBtn;
+    if(mode === 'auto'){ document.documentElement.removeAttribute('data-theme'); }
+    else { document.documentElement.setAttribute('data-theme', mode); }
+    renderTierChart(); // repaint svg colors that read cssVar directly
+  });
+});
+
+renderAll();
+</script>
+</body>
+</html>
