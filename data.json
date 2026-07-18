@@ -1,0 +1,16 @@
+{
+  "_readme": "Edit the numbers below on GitHub (pencil icon > change values > Commit changes) and the live dashboard picks them up automatically on next page load. Each array has exactly 7 numbers, one per tier, in this order: Free, Economy, Bronze, Silver, Gold, Platinum, Diamond. tier_totals = total units in that tier. sold/portout/pick = units in each status. Do not edit 'available' or 'Total' anywhere -- the dashboard computes those automatically as tier_totals minus sold minus portout minus pick, and Total as 574 + 575.",
+  "tiers": ["Free", "Economy", "Bronze", "Silver", "Gold", "Platinum", "Diamond"],
+  "575": {
+    "tier_totals": [428550, 318990, 161182, 76984, 12393, 1846, 55],
+    "sold":        [270256, 185075, 32824, 6766, 635, 47, 1],
+    "portout":     [94125, 64391, 22597, 4834, 2274, 1165, 54],
+    "pick":        [21015, 24510, 1255, 842, 947, 163, 0]
+  },
+  "574": {
+    "tier_totals": [477629, 353718, 107025, 52987, 7255, 1349, 37],
+    "sold":        [293987, 104948, 6331, 396, 40, 20, 1],
+    "portout":     [60189, 26082, 2757, 213, 472, 724, 36],
+    "pick":        [37436, 14885, 118, 52, 79, 59, 0]
+  }
+}
